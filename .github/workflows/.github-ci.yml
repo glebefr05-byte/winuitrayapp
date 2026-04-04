@@ -1,0 +1,65 @@
+on:
+  pull_request:
+    branches: [ main ]
+
+jobs:
+  lint:
+    runs-on: windows-latest
+    steps:
+    - uses: actions/checkout@v4
+    
+    - name: Install cppcheck
+      run: choco install cppcheck -y
+    
+    - name: Run cppcheck
+      run: |
+        cppcheck --enable=all --inconclusive --std=c++17 `
+          --suppress=missingIncludeSystem `
+          --error-exitcode=1 `
+          src/ --xml 2> cppcheck-report.xml
+      continue-on-error: true
+    
+    - name: Upload cppcheck report
+      uses: actions/upload-artifact@v4
+      with:
+        name: cppcheck-report
+        path: cppcheck-report.xml
+
+  build-msbuild:
+    runs-on: windows-latest
+    needs: lint
+    strategy:
+      matrix:
+        vs_version: [2022]
+        configuration: [Debug, Release]
+        platform: [x64, x86]
+    
+    steps:
+    - uses: actions/checkout@v4
+    
+    - name: Setup MSBuild
+      uses: microsoft/setup-msbuild@v2
+      with:
+        vs-version: '[${{ matrix.vs_version }}]'
+    
+    - name: Generate Visual Studio solution
+      run: |
+        cmake -B build_ms -G "Visual Studio 17 ${{ matrix.vs_version }}" `
+              -DCMAKE_CONFIGURATION_TYPES="${{ matrix.configuration }}" `
+              -A ${{ matrix.platform == 'x64' && 'x64' || 'Win32' }}
+    
+    - name: Build with MSBuild
+      run: |
+        msbuild build_ms/TrayApp.sln /p:Configuration=${{ matrix.configuration }} `
+               /p:Platform=${{ matrix.platform == 'x64' && 'x64' || 'x86' }} `
+               /p:Verbosity=minimal /m
+    
+    - name: Upload MSBuild artifacts
+      uses: actions/upload-artifact@v4
+      with:
+        name: TrayApp-MSBuild-${{ matrix.configuration }}-${{ matrix.platform }}
+        path: |
+          build_ms/${{ matrix.configuration }}/*.exe
+          build_ms/${{ matrix.configuration }}/*.dll
+          build_ms/${{ matrix.configuration }}/*.pdb
+        retention-days: 30
