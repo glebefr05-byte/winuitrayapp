@@ -1,9 +1,10 @@
 on:
   pull_request:
+    types:    [opened, synchronize]
     branches: [ main ]
 
 jobs:
-  lint:
+  init:
     runs-on: windows-latest
     steps:
     - uses: actions/checkout@v4
@@ -25,9 +26,44 @@ jobs:
         name: cppcheck-report
         path: cppcheck-report.xml
 
+  build-cmake:
+    runs-on: windows-latest
+    needs: init
+    strategy:
+      matrix:
+        configuration: [Debug, Release]
+        platform: [x64, Win32]
+    
+    steps:
+    - uses: actions/checkout@v4
+    
+    - name: Configure CMake
+      run: |
+        cmake -B build -DCMAKE_BUILD_TYPE=${{ matrix.configuration }} `
+              -A ${{ matrix.platform == 'x64' && 'x64' || 'Win32' }}
+    
+    - name: Build
+      run: cmake --build build --config ${{ matrix.configuration }} --parallel
+    
+    - name: Test (if tests exist)
+      run: |
+        cd build
+        ctest -C ${{ matrix.configuration }} --output-on-failure
+      continue-on-error: true
+    
+    - name: Upload build artifacts
+      uses: actions/upload-artifact@v4
+      with:
+        name: TrayApp-${{ matrix.configuration }}-${{ matrix.platform }}
+        path: |
+          build/${{ matrix.configuration }}/*.exe
+          build/${{ matrix.configuration }}/*.dll
+          build/${{ matrix.configuration }}/*.pdb
+        retention-days: 30
+
   build-msbuild:
     runs-on: windows-latest
-    needs: lint
+    needs: init
     strategy:
       matrix:
         vs_version: [2022]
@@ -40,7 +76,7 @@ jobs:
     - name: Setup MSBuild
       uses: microsoft/setup-msbuild@v2
       with:
-        vs-version: '[${{ matrix.vs_version }}]'
+        vs-version: '${{ matrix.vs_version }}'
     
     - name: Generate Visual Studio solution
       run: |
