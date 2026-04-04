@@ -29,10 +29,6 @@ jobs:
   build-cmake:
     runs-on: windows-latest
     needs: init
-    strategy:
-      matrix:
-        configuration: [Debug]
-        platform: [Win32]
     
     steps:
     - uses: actions/checkout@v4
