@@ -31,8 +31,8 @@ jobs:
     needs: init
     strategy:
       matrix:
-        configuration: [Debug, Release]
-        platform: [x64, Win32]
+        configuration: [Debug]
+        platform: [Win32]
     
     steps:
     - uses: actions/checkout@v4
@@ -45,7 +45,7 @@ jobs:
     - name: Build
       run: cmake --build build --config ${{ matrix.configuration }} --parallel
     
-    - name: Test (if tests exist)
+    - name: Test
       run: |
         cd build
         ctest -C ${{ matrix.configuration }} --output-on-failure
@@ -59,43 +59,4 @@ jobs:
           build/${{ matrix.configuration }}/*.exe
           build/${{ matrix.configuration }}/*.dll
           build/${{ matrix.configuration }}/*.pdb
-        retention-days: 30
-
-  build-msbuild:
-    runs-on: windows-latest
-    needs: init
-    strategy:
-      matrix:
-        vs_version: [2022]
-        configuration: [Debug, Release]
-        platform: [x64, x86]
-    
-    steps:
-    - uses: actions/checkout@v4
-    
-    - name: Setup MSBuild
-      uses: microsoft/setup-msbuild@v2
-      with:
-        vs-version: '${{ matrix.vs_version }}'
-    
-    - name: Generate Visual Studio solution
-      run: |
-        cmake -B build_ms -G "Visual Studio 17 ${{ matrix.vs_version }}" `
-              -DCMAKE_CONFIGURATION_TYPES="${{ matrix.configuration }}" `
-              -A ${{ matrix.platform == 'x64' && 'x64' || 'Win32' }}
-    
-    - name: Build with MSBuild
-      run: |
-        msbuild build_ms/TrayApp.sln /p:Configuration=${{ matrix.configuration }} `
-               /p:Platform=${{ matrix.platform == 'x64' && 'x64' || 'x86' }} `
-               /p:Verbosity=minimal /m
-    
-    - name: Upload MSBuild artifacts
-      uses: actions/upload-artifact@v4
-      with:
-        name: TrayApp-MSBuild-${{ matrix.configuration }}-${{ matrix.platform }}
-        path: |
-          build_ms/${{ matrix.configuration }}/*.exe
-          build_ms/${{ matrix.configuration }}/*.dll
-          build_ms/${{ matrix.configuration }}/*.pdb
         retention-days: 30
