@@ -1,0 +1,58 @@
+on:
+  pull_request:
+    types:    [opened, synchronize]
+    branches: [ main ]
+
+jobs:
+  init:
+    runs-on: windows-latest
+    steps:
+    - uses: actions/checkout@v4
+    
+    - name: Install cppcheck
+      run: choco install cppcheck -y
+    
+    - name: Run cppcheck
+      run: |
+        cppcheck --enable=all --inconclusive --std=c++17 `
+          --suppress=missingIncludeSystem `
+          --error-exitcode=1 `
+          src/ --xml 2> cppcheck-report.xml
+      continue-on-error: true
+    
+    - name: Upload cppcheck report
+      uses: actions/upload-artifact@v4
+      with:
+        name: cppcheck-report
+        path: cppcheck-report.xml
+
+  build-cmake:
+    runs-on: windows-latest
+    needs: init
+    
+    steps:
+    - uses: actions/checkout@v4
+    
+    - name: Configure CMake
+      run: |
+        cmake -B build -DCMAKE_BUILD_TYPE=${{ matrix.configuration }} `
+              -A ${{ matrix.platform == 'x64' && 'x64' || 'Win32' }}
+    
+    - name: Build
+      run: cmake --build build --config ${{ matrix.configuration }} --parallel
+    
+    - name: Test
+      run: |
+        cd build
+        ctest -C ${{ matrix.configuration }} --output-on-failure
+      continue-on-error: true
+    
+    - name: Upload build artifacts
+      uses: actions/upload-artifact@v4
+      with:
+        name: TrayApp-${{ matrix.configuration }}-${{ matrix.platform }}
+        path: |
+          build/${{ matrix.configuration }}/*.exe
+          build/${{ matrix.configuration }}/*.dll
+          build/${{ matrix.configuration }}/*.pdb
+        retention-days: 30
